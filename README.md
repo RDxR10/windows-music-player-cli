@@ -32,9 +32,8 @@ $MusicDir = "G:\music"
 
 ![Replay](https://github.com/user-attachments/assets/7aa6ed28-3e33-4389-8e0e-9ffe7dff8f4f)
 
-![Repeat](https://github.com/user-attachments/assets/b2a3d317-c1bb-4080-b471-3a756d59fc7f)
-
 ![Notification](https://github.com/user-attachments/assets/eddde2da-948c-4b6a-9017-1dffc8aea127)
 
-![Auto_Exit](https://github.com/user-attachments/assets/2c2f6e74-a27a-44b1-b833-50025e0e3904)
+![Repeat](https://github.com/user-attachments/assets/b2a3d317-c1bb-4080-b471-3a756d59fc7f)
 
+![Auto_Exit](https://github.com/user-attachments/assets/2c2f6e74-a27a-44b1-b833-50025e0e3904)
