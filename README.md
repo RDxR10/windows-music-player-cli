@@ -37,3 +37,7 @@ $MusicDir = "G:\music"
 ![Repeat](https://github.com/user-attachments/assets/b2a3d317-c1bb-4080-b471-3a756d59fc7f)
 
 ![Auto_Exit](https://github.com/user-attachments/assets/2c2f6e74-a27a-44b1-b833-50025e0e3904)
+
+## New Features/Updates
+
+* 05-04-2026 [FEAT]: Queue now opens in a separate view with arrow key navigation to select and play a song; current song continues playing during navigation and auto-advance to the next song is suspended until the queue is closed.
