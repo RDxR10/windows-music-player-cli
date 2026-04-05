@@ -47,17 +47,74 @@ function Shuffle-Queue {
 function Show-Queue {
     Write-Host "`n--- QUEUE ---"
     for ($i = 0; $i -lt $global:Queue.Count; $i++) {
-        if ($i -eq $global:Index) {
-            Write-Host ">> $([System.IO.Path]::GetFileName($global:Queue[$i]))" -ForegroundColor Green
+        $name = [System.IO.Path]::GetFileName($global:Queue[$i])
+        if ($i -eq $global:Index -and $i -eq $global:CursorIndex) {
+            Write-Host ">> * $name" -ForegroundColor Cyan
+        } elseif ($i -eq $global:Index) {
+            Write-Host ">>   $name" -ForegroundColor Green
+        } elseif ($i -eq $global:CursorIndex) {
+            Write-Host "  *  $name" -ForegroundColor Yellow
         } else {
-            Write-Host "   $([System.IO.Path]::GetFileName($global:Queue[$i]))"
+            Write-Host "     $name"
         }
     }
-    $loopStatus   = if ($global:LoopMode)  { "ON" } else { "OFF" }
-    $repeatStatus = if ($global:RepeatOne) { "ON" } else { "OFF" }
+    $loopStatus   = if ($global:LoopMode)   { "ON" } else { "OFF" }
+    $repeatStatus = if ($global:RepeatOne)  { "ON" } else { "OFF" }
     $searchStatus = if ($global:SearchMode) { " [SEARCH MODE]" } else { "" }
     Write-Host "   [Loop: $loopStatus]  [Repeat: $repeatStatus]  [Vol: $global:Volume%]$searchStatus" -ForegroundColor DarkCyan
-    Write-Host "--------------`n"
+    Write-Host "--------------"
+    Write-Host "  Up/Down = Navigate | Enter = Play | Q = Close" -ForegroundColor DarkGray
+}
+
+
+function Open-Queue {
+    $global:CursorIndex = $global:Index
+    [console]::Clear()
+    Show-Queue
+
+    while ($true) {
+        if ([console]::KeyAvailable) {
+            $k = [console]::ReadKey($true).Key
+            switch ($k) {
+                "UpArrow" {
+                    if ($global:CursorIndex -gt 0) {
+                        $global:CursorIndex--
+                        [console]::Clear()
+                        Show-Queue
+                    }
+                }
+                "DownArrow" {
+                    if ($global:CursorIndex -lt ($global:Queue.Count - 1)) {
+                        $global:CursorIndex++
+                        [console]::Clear()
+                        Show-Queue
+                    }
+                }
+                "Enter" {
+                    Stop-Current
+                    $global:Index = $global:CursorIndex
+                    [console]::Clear()
+                    Play-Current
+                    return
+                }
+                "Q" {
+                    
+                    [console]::Clear()
+                    Write-Host "Now playing: $(Split-Path $global:Queue[$global:Index] -Leaf)" -ForegroundColor Cyan
+                    Write-Host ""
+                    Write-Host "Controls:"
+                    Write-Host "  N = Next       | B = Previous  | P = Play/Pause"
+                    Write-Host "  S = Shuffle    | Q = Show Queue | F = Search"
+                    Write-Host "  L = Toggle Loop (queue) | R = Toggle Repeat (current song)"
+                    Write-Host "  + = Volume Up  | - = Volume Down"
+                    Write-Host "  X = Exit"
+                    Write-Host ""
+                    return
+                }
+            }
+        }
+        Start-Sleep -Milliseconds 50
+    }
 }
 
 function Get-TrackDuration {
@@ -155,7 +212,6 @@ function Prev-Track {
 }
 
 function Search-And-Play {
-    # Stop progress line and pause playback while user is typing
     Write-Host ""
     $wasPlaying = -not $global:Paused
     if ($wasPlaying) {
@@ -166,7 +222,6 @@ function Search-And-Play {
     Write-Host "Search: " -NoNewline -ForegroundColor Yellow
     $query = Read-Host
 
-    # Resume if user cancels with blank input
     if (-not $query) {
         if ($wasPlaying) {
             [WinMM]::mciSendString("resume $global:Alias", $null, 0, [IntPtr]::Zero) | Out-Null
@@ -217,34 +272,28 @@ function Search-And-Play {
         return
     }
 
-    # User picked a song — enter search mode
     $chosen = $list[$choiceInt - 1]
     Stop-Current
 
-    # Save current queue and state, build single-song queue
-    $global:PreSearchQueue    = $global:Queue
-    $global:PreSearchIndex    = $global:Index
-    $global:PreSearchLoop     = $global:LoopMode
-    $global:PreSearchRepeat   = $global:RepeatOne
-    $global:SearchMode        = $true
+    $global:PreSearchQueue  = $global:Queue
+    $global:PreSearchIndex  = $global:Index
+    $global:SearchMode      = $true
 
-    $global:Queue      = @($chosen)
-    $global:Index      = 0
-    $global:LoopMode   = $false
-    $global:RepeatOne  = $false
+    $global:Queue     = @($chosen)
+    $global:Index     = 0
+    $global:LoopMode  = $false
+    $global:RepeatOne = $false
 
     Write-Host "  [Search mode: playing single song]" -ForegroundColor DarkYellow
     Play-Current
 }
 
 function Exit-SearchMode {
-    # Restore full queue and previous states
     $global:Queue      = $global:PreSearchQueue
     $global:Index      = $global:PreSearchIndex
     $global:LoopMode   = $false
     $global:RepeatOne  = $false
     $global:SearchMode = $false
-    #Write-Host "`n  Search mode ended. Queue restored." -ForegroundColor DarkGray
 }
 
 function Start-EndOfQueueCountdown {
@@ -267,18 +316,14 @@ function Start-EndOfQueueCountdown {
                 $k = [console]::ReadKey($true).Key
                 if ($k -eq "L") {
                     Write-Host ""
+                    $global:Index = 0
+                    $global:WaitingForLoop = $false
                     if ($global:SearchMode) {
-                        # Replay the single searched song
                         Write-Host "  Replaying searched song..." -ForegroundColor Green
-                        $global:Index = 0
-                        $global:WaitingForLoop = $false
-                        Play-Current
                     } else {
                         Write-Host "  Looping queue from start!" -ForegroundColor Green
-                        $global:Index = 0
-                        $global:WaitingForLoop = $false
-                        Play-Current
                     }
+                    Play-Current
                     return
                 }
                 if ($k -eq "X") {
@@ -312,6 +357,7 @@ $global:Volume         = 100
 $global:SearchMode     = $false
 $global:PreSearchQueue = $null
 $global:PreSearchIndex = 0
+$global:CursorIndex    = 0
 
 Shuffle-Queue
 Show-Queue
@@ -338,7 +384,6 @@ while ($global:Running) {
             "B"        { Write-Host ""; Prev-Track }
             "P"        { Toggle-Pause }
             "S"        {
-                # Exit search mode if active before shuffling
                 if ($global:SearchMode) { Exit-SearchMode }
                 Write-Host "`n  Shuffling..." -ForegroundColor Yellow
                 Stop-Current
@@ -346,7 +391,7 @@ while ($global:Running) {
                 Show-Queue
                 Play-Current
             }
-            "Q"        { Write-Host ""; Show-Queue }
+            "Q"        { Open-Queue }       
             "L"        { Toggle-Loop }
             "R"        { Toggle-Repeat }
             "F"        { Search-And-Play }
@@ -370,7 +415,6 @@ while ($global:Running) {
                 Stop-Current
                 Play-Current
             } elseif ($global:SearchMode) {
-                # Single song queue always goes to countdown
                 Start-EndOfQueueCountdown
             } elseif ($global:Index + 1 -ge $global:Queue.Count) {
                 if ($global:LoopMode) {
