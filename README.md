@@ -2,7 +2,7 @@
 
 Most of us don’t like clicking buttons over and over again, especially on Windows when listening to music; sometimes we just want that Linux-like experience. This CLI music player serves that purpose.
 
-Get your playlist shuffled and switch tracks with ease. Enjoy uninterrupted, ad-free music playback.
+Get your playlist shuffled and switch tracks with ease... enjoy your favorite music - uninterrupted and ad-free.
 
 Best suited for those who have a regular music playlist/library and prefer the flexibility to change songs on the fly.
 
