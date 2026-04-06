@@ -7,7 +7,7 @@ Get your playlist shuffled and switch tracks with ease. Enjoy uninterrupted, ad-
 Best suited for those who have a regular music playlist/library and prefer the flexibility to change songs on the fly.
 
 > [!WARNING]
-> This repository does not encourage playing songs in corporate environments. Please use at your own risk.
+> This repository does not encourage playing songs in corporate environments. Use at your own risk.
 
 ## Setup
 
