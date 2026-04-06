@@ -2,9 +2,12 @@
 
 Most of us don’t like clicking buttons over and over again, especially on Windows when listening to music; sometimes we just want that Linux-like experience. This CLI music player serves that purpose.
 
-Get your playlist shuffled and switch tracks with ease.
+Get your playlist shuffled and switch tracks with ease. Enjoy uninterrupted, ad-free music playback.
 
 Best suited for those who have a regular music playlist/library and prefer the flexibility to change songs on the fly.
+
+> [!WARNING]
+> This repository does not encourage playing songs in corporate environments. Please use at your own risk.
 
 ## Setup
 
@@ -41,3 +44,5 @@ $MusicDir = "G:\music"
 ## New Features/Updates
 
 * 05-04-2026 [FEAT]: Queue now opens in a separate view with arrow key navigation to select and play a song; current song continues playing during navigation and auto-advance to the next song is suspended until the queue is closed.
+
+* 06-04-2026 [FEAT]: Search, pause and endless scrolling have been added to the navigator view. The last played song is now highlighted, and search mode combined with the navigator enables custom queue creation.
