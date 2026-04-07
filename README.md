@@ -45,4 +45,4 @@ $MusicDir = "G:\music"
 
 * 05-04-2026 [FEAT]: Queue now opens in a separate view with arrow key navigation to select and play a song; current song continues playing during navigation and auto-advance to the next song is suspended until the queue is closed.
 
-* 06-04-2026 [FEAT]: Search, pause and endless scrolling have been added to the navigator view. The last played song is now highlighted, and search mode combined with the navigator enables custom queue creation.
+* 07-04-2026 [FEAT]: Search, pause and endless scrolling have been added to the navigator view. The last played song is now highlighted, and search mode combined with the navigator enables custom queue creation.
