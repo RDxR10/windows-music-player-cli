@@ -25,19 +25,51 @@ $MusicDir = "G:\music"
 .\play.ps1
 ```
 
-![Sequence](https://github.com/user-attachments/assets/361cea7a-fc40-4abc-8839-30713d60a043)
+## Appearance
+
+### Windows 11
+
+<img width="952" height="360" alt="play_WIN_11" src="https://github.com/user-attachments/assets/4732f511-84fa-4ebc-863f-33165646b305" />
+
+### Windows 10
+
+![play_WIN_10](https://github.com/user-attachments/assets/9384369b-d1be-4b80-9814-dc402afad2f7)
+
+## Features
+
+* Select track
+
+![nav_WIN_10](https://github.com/user-attachments/assets/f003055f-ef6a-436e-bcda-52c571bf0a24)
+
+* Pause 
 
 ![Paused](https://github.com/user-attachments/assets/0cf49608-d002-4208-acf8-e2ae733f7c8a)
 
-![Shuffled_Queue](https://github.com/user-attachments/assets/6cd71e6d-1949-48c6-8a7e-8c7b98cc9e0a)
+* Shuffle Queue
 
-![Search](https://github.com/user-attachments/assets/e745a651-8cf3-4ba9-a263-dd32182a2edd)
+![Shuffled_Queue](https://github.com/user-attachments/assets/b91f9fd7-6dc0-41b2-a10e-31ed0e278249)
 
-![Replay](https://github.com/user-attachments/assets/7aa6ed28-3e33-4389-8e0e-9ffe7dff8f4f)
+* Search
+
+![Search_Single_Song](https://github.com/user-attachments/assets/1ccead1b-6e07-45b9-bdeb-0b755e9766d1)
+
+* Replay searched track
+
+![Replay](https://github.com/user-attachments/assets/0d1cf92f-9368-4b9b-8b53-abcf38c87e99)
+
+* Notification
 
 ![Notification](https://github.com/user-attachments/assets/eddde2da-948c-4b6a-9017-1dffc8aea127)
 
-![Repeat](https://github.com/user-attachments/assets/b2a3d317-c1bb-4080-b471-3a756d59fc7f)
+* Repeat Mode
+
+![Repeat](https://github.com/user-attachments/assets/b16108ac-3d88-463b-abdd-3a0b839085e9)
+
+* Loop Mode
+
+![Loop_Mode](https://github.com/user-attachments/assets/24b21b03-34bd-4f49-9d7d-dc1bfc30dd29)
+
+* Auto exit after the searched track ends
 
 ![Auto_Exit](https://github.com/user-attachments/assets/2c2f6e74-a27a-44b1-b833-50025e0e3904)
 
