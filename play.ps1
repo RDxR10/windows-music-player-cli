@@ -156,10 +156,18 @@ function Open-Navigator {
                     Write-Host "  $($i + 1). $([System.IO.Path]::GetFileName($list[$i]))"
                 }
                 Write-Host ""
-                Write-Host "Enter number (or 0 to cancel): " -NoNewline -ForegroundColor Yellow
+                Write-Host "Enter number (append 'a' to add to queue only, 0 to cancel): " -NoNewline -ForegroundColor Yellow
                 $choice = Read-Host
 
                 if ($choice -eq "0" -or $choice -eq "") { break }
+				
+				
+				$addOnly = $false
+				if ($choice.Length -ge 2 -and $choice[-1] -eq 'A') {
+					$addOnly = $true
+					$choice = $choice.Substring(0, $choice.Length - 1)
+				}
+				
 
                 $choiceInt = 0
                 if (-not [int]::TryParse($choice, [ref]$choiceInt) -or $choiceInt -lt 1 -or $choiceInt -gt $list.Count) {
@@ -169,6 +177,21 @@ function Open-Navigator {
                 }
 
                 $chosen   = $list[$choiceInt - 1]
+				
+				if ($addOnly) {
+					if ($global:Queue -contains $chosen) {
+						Write-Host "  Song already in queue." -ForegroundColor Yellow
+						Start-Sleep -Milliseconds 800
+						break
+					}
+					
+					$global:Queue = $global:Queue + $chosen
+					Write-Host "  Added to queue." -ForegroundColor Green
+					Start-Sleep -Milliseconds 800
+					break
+				}
+					
+					
                 $newIndex = [array]::IndexOf($global:Queue, $chosen)
                 if ($newIndex -lt 0) {
                     $global:Queue = $global:Queue + $chosen
