@@ -24,6 +24,16 @@ $MusicDir = "G:\music"
 
 .\play.ps1
 ```
+> [!NOTE]
+> Requires script execution to be enabled. 
+
+### Alternative
+
+Run the script without modifying the current execution policy:
+```powershell
+
+powershell -ep bypass -c .\play.ps1
+```
 
 ## Appearance
 
