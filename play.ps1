@@ -1,5 +1,7 @@
 $MusicDir = "G:\music"
 
+$SongArg = if ($args.Count -gt 0) { $args[0] } else { "" }
+
 if (-not (Test-Path $MusicDir)) {
     Write-Error "Directory not found: $MusicDir"
     exit
@@ -20,7 +22,7 @@ public class WinMM {
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
 
-function Show-Notification($title, $text) {
+function Show-Notification($title, $text) {	
     $notify = New-Object System.Windows.Forms.NotifyIcon
     $notify.Icon = [System.Drawing.SystemIcons]::Information
     $notify.BalloonTipTitle = $title
@@ -39,8 +41,50 @@ if (-not $global:Songs) {
     exit
 }
 
+
+$global:CliSongTarget = $null
+
+if ($SongArg -ne "") {
+    $results = $global:Songs | Where-Object {
+        [System.IO.Path]::GetFileName($_) -like "*$SongArg*"
+    }
+
+    if (-not $results) {
+        Write-Host "No songs found matching '$SongArg'." -ForegroundColor Red
+        exit
+    }
+
+    $list = @($results)
+
+    if ($list.Count -eq 1) {
+        $global:CliSongTarget = $list[0]
+    } else {
+        Write-Host ""
+        Write-Host "  Looking for '$SongArg' - did you mean one of these?" -ForegroundColor Yellow
+        Write-Host ""
+        for ($i = 0; $i -lt $list.Count; $i++) {
+            Write-Host "  $($i + 1). $([System.IO.Path]::GetFileName($list[$i]))"
+        }
+        Write-Host ""
+        Write-Host "Enter number (or 0 to cancel): " -NoNewline -ForegroundColor Yellow
+        $choice = Read-Host
+
+        if ($choice -eq "0" -or $choice -eq "") {
+            Write-Host "  Cancelled." -ForegroundColor DarkGray
+            exit
+        }
+
+        $choiceInt = 0
+        if (-not [int]::TryParse($choice, [ref]$choiceInt) -or $choiceInt -lt 1 -or $choiceInt -gt $list.Count) {
+            Write-Host "  Invalid selection." -ForegroundColor Red
+            exit
+        }
+
+        $global:CliSongTarget = $list[$choiceInt - 1]
+    }
+}
+
 function Shuffle-Queue {
-    
     $currentFile = if ($global:Queue -and $global:Queue.Count -gt 0) {
         $global:Queue[$global:Index]
     } else { $null }
@@ -49,8 +93,6 @@ function Shuffle-Queue {
     $global:Index       = 0
     $global:CursorIndex = 0
 
-    
-    
     if ($currentFile) {
         $foundAt = [array]::IndexOf($global:Queue, $currentFile)
         $global:LastPlayedIndex = if ($foundAt -ge 0) { $foundAt } else { 0 }
@@ -82,7 +124,6 @@ function Show-Queue {
 }
 
 function Open-Navigator {
-    
     $global:CursorIndex = $global:Index
 
     while ($true) {
@@ -160,14 +201,12 @@ function Open-Navigator {
                 $choice = Read-Host
 
                 if ($choice -eq "0" -or $choice -eq "") { break }
-				
-				
-				$addOnly = $false
-				if ($choice.Length -ge 2 -and $choice[-1] -eq 'A') {
-					$addOnly = $true
-					$choice = $choice.Substring(0, $choice.Length - 1)
-				}
-				
+
+                $addOnly = $false
+                if ($choice.Length -ge 2 -and $choice[-1] -eq 'A') {
+                    $addOnly = $true
+                    $choice = $choice.Substring(0, $choice.Length - 1)
+                }
 
                 $choiceInt = 0
                 if (-not [int]::TryParse($choice, [ref]$choiceInt) -or $choiceInt -lt 1 -or $choiceInt -gt $list.Count) {
@@ -176,22 +215,20 @@ function Open-Navigator {
                     break
                 }
 
-                $chosen   = $list[$choiceInt - 1]
-				
-				if ($addOnly) {
-					if ($global:Queue -contains $chosen) {
-						Write-Host "  Song already in queue." -ForegroundColor Yellow
-						Start-Sleep -Milliseconds 800
-						break
-					}
-					
-					$global:Queue = $global:Queue + $chosen
-					Write-Host "  Added to queue." -ForegroundColor Green
-					Start-Sleep -Milliseconds 800
-					break
-				}
-					
-					
+                $chosen = $list[$choiceInt - 1]
+
+                if ($addOnly) {
+                    if ($global:Queue -contains $chosen) {
+                        Write-Host "  Song already in queue." -ForegroundColor Yellow
+                        Start-Sleep -Milliseconds 800
+                        break
+                    }
+                    $global:Queue = $global:Queue + $chosen
+                    Write-Host "  Added to queue." -ForegroundColor Green
+                    Start-Sleep -Milliseconds 800
+                    break
+                }
+
                 $newIndex = [array]::IndexOf($global:Queue, $chosen)
                 if ($newIndex -lt 0) {
                     $global:Queue = $global:Queue + $chosen
@@ -473,6 +510,18 @@ $global:LastPlayedIndex = 0
 $global:QueueOpen       = $false
 
 Shuffle-Queue
+
+if ($global:CliSongTarget) {
+    $global:PreSearchQueue  = $global:Queue
+    $global:PreSearchIndex  = 0
+    $global:SearchMode      = $true
+    $global:Queue           = @($global:CliSongTarget)
+    $global:Index           = 0
+    $global:LoopMode        = $false
+    $global:RepeatOne       = $false
+    Write-Host "  [Search mode: playing single song]" -ForegroundColor DarkYellow
+}
+
 Show-Queue
 Play-Current
 
@@ -572,7 +621,7 @@ while ($global:Running) {
 
         if ($status.ToString() -eq "stopped" -and -not $global:Paused) {
             if ($global:RepeatOne) {
-				$global:LastPlayedIndex = $global:Index
+                $global:LastPlayedIndex = $global:Index
                 Stop-Current
                 Play-Current
             } elseif ($global:Index + 1 -ge $global:Queue.Count) {
