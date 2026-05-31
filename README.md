@@ -11,7 +11,11 @@ Best suited for those who have a regular music playlist/library and prefer the f
 
 ## Setup
 
-Add your music directory in the first line of the script:
+Drop the script in your music directory.
+
+OR
+
+Specify your music directory path in the first line of the script. For example:
 
 ```powershell
 
@@ -104,4 +108,4 @@ Tracks can be added to the queue in two ways. Start by searching for the desired
 
 * 27-04-2026 [FEAT]: Songs can now be added to the queue via navigator view without interrupting playback.
 
-* 31-05-2026 [FEAT]: The single song play/lazy play feature has been added. Song names can now be passed as arguments to directly play a specific song. Partial name matching is supported, so an exact name is not required.
+* 31-05-2026 [FEAT]: The single song play/lazy play feature has been added. Song names can now be passed as arguments to directly play a specific song. Partial name matching is supported, so an exact name is not required. Also, the script now defaults to the directory it is placed in.
