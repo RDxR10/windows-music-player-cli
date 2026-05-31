@@ -103,3 +103,5 @@ Tracks can be added to the queue in two ways. Start by searching for the desired
 * 07-04-2026 [FEAT]: Search, pause and endless scrolling have been added to the navigator view. The last played song is now highlighted, and search mode combined with the navigator enables custom queue creation.
 
 * 27-04-2026 [FEAT]: Songs can now be added to the queue via navigator view without interrupting playback.
+
+* 31-05-2026 [FEAT]: The single song play/lazy play feature has been added. Song names can now be passed as arguments to directly play a specific song. Partial name matching is supported, so an exact name is not required.
