@@ -28,6 +28,12 @@ $MusicDir = "G:\music"
 
 .\play.ps1
 ```
+OR
+```powershell
+
+.\play.ps1 'song name'
+```
+
 > [!NOTE]
 > Requires script execution to be enabled. 
 
@@ -36,7 +42,12 @@ $MusicDir = "G:\music"
 Run the script without modifying the current execution policy:
 ```powershell
 
-powershell -ep bypass -c .\play.ps1
+powershell -ep bypass -f .\play.ps1
+```
+OR
+```powershell
+
+powershell -ep bypass -f .\play.ps1 'song name'
 ```
 
 ## Appearance
@@ -51,43 +62,43 @@ powershell -ep bypass -c .\play.ps1
 
 ## Features
 
-* ### Select track
+### Select track
 
 ![nav_WIN_10](https://github.com/user-attachments/assets/f003055f-ef6a-436e-bcda-52c571bf0a24)
 
-* ### Pause 
+### Pause 
 
 ![Paused](https://github.com/user-attachments/assets/0cf49608-d002-4208-acf8-e2ae733f7c8a)
 
-* ### Shuffle Queue
+### Shuffle Queue
 
 ![Shuffled_Queue](https://github.com/user-attachments/assets/b91f9fd7-6dc0-41b2-a10e-31ed0e278249)
 
-* ### Search
+### Search
 
 ![Search_Single_Song](https://github.com/user-attachments/assets/1ccead1b-6e07-45b9-bdeb-0b755e9766d1)
 
-* ### Replay searched track
+### Replay searched track
 
 ![Replay](https://github.com/user-attachments/assets/0d1cf92f-9368-4b9b-8b53-abcf38c87e99)
 
-* ### Notification
+### Notification
 
 ![Notification](https://github.com/user-attachments/assets/eddde2da-948c-4b6a-9017-1dffc8aea127)
 
-* ### Repeat Mode
+### Repeat Mode
 
 ![Repeat](https://github.com/user-attachments/assets/b16108ac-3d88-463b-abdd-3a0b839085e9)
 
-* ### Loop Mode
+### Loop Mode
 
 ![Loop_Mode](https://github.com/user-attachments/assets/24b21b03-34bd-4f49-9d7d-dc1bfc30dd29)
 
-* ### Auto exit after the searched track ends
+### Auto exit after the searched track ends
 
 ![Auto_Exit](https://github.com/user-attachments/assets/2c2f6e74-a27a-44b1-b833-50025e0e3904)
 
-* ### Adding Tracks to Queue
+### Adding Tracks to Queue
 
 Tracks can be added to the queue in two ways. Start by searching for the desired track. In the navigator view, you can either search and play tracks immediately, or search and add them to the queue without playing (shown below). 
 
@@ -99,6 +110,13 @@ Tracks can be added to the queue in two ways. Start by searching for the desired
 <br/>
 <img width="995" height="207" alt="add_to_queue_2c" src="https://github.com/user-attachments/assets/5c376c78-d96e-47b2-b148-fa33fe0e830f" />
 
+### Single Song Play/Lazy Play
+
+<img width="1001" height="252" alt="lazy_play_full" src="https://github.com/user-attachments/assets/231dab5c-5895-4c72-aab9-9f4fb035744e" />
+
+<img width="883" height="252" alt="lazy_play_partial_A" src="https://github.com/user-attachments/assets/5cb6bf3f-5e41-4561-9cff-8e07f45d92f6" />
+
+<img width="971" height="453" alt="lazy_play_partial_B" src="https://github.com/user-attachments/assets/c4742682-f75e-4b59-a7be-5299dedc8bd0" />
 
 ## New Features/Updates
 
