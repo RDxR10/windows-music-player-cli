@@ -85,9 +85,13 @@ if ($SongArg -ne "") {
 }
 
 function Shuffle-Queue {
-    $currentFile = if ($global:Queue -and $global:Queue.Count -gt 0) {
+    $currentFile = if ($global:PreSearchFile) {
+        $global:PreSearchFile                              
+    } elseif ($global:Queue -and $global:Queue.Count -gt 0) {
         $global:Queue[$global:Index]
     } else { $null }
+
+    $global:PreSearchFile = $null                        
 
     $global:Queue       = $global:Songs | Sort-Object { Get-Random }
     $global:Index       = 0
@@ -249,7 +253,7 @@ function Open-Navigator {
                 Write-Host ""
                 Write-Host "Controls:"
                 Write-Host "  N = Next       | B = Previous  | P = Pause/Play"
-                Write-Host "  S = Shuffle    | Q = View Queue | QQ = Navigate | F = Search"
+                Write-Host "  S = Shuffle All | Q = View Queue | QQ = Navigate | F = Search"
                 Write-Host "  L = Toggle Loop (queue) | R = Toggle Repeat (current song)"
                 Write-Host "  + = Volume Up  | - = Volume Down"
                 Write-Host "  X = Exit"
@@ -423,6 +427,7 @@ function Search-And-Play {
 
     $global:PreSearchQueue  = $global:Queue
     $global:PreSearchIndex  = $global:Index
+	$global:PreSearchFile   = $chosen
     $global:SearchMode      = $true
 
     $global:Queue     = @($chosen)
@@ -435,9 +440,9 @@ function Search-And-Play {
 }
 
 function Exit-SearchMode {
+    $global:PreSearchFile   = $global:Queue[$global:Index]
     $global:Queue           = $global:PreSearchQueue
     $global:Index           = $global:PreSearchIndex
-    $global:LastPlayedIndex = $global:PreSearchIndex
     $global:LoopMode        = $false
     $global:RepeatOne       = $false
     $global:SearchMode      = $false
@@ -504,21 +509,21 @@ $global:WaitingForLoop  = $false
 $global:Volume          = 100
 $global:SearchMode      = $false
 $global:PreSearchQueue  = $null
-$global:PreSearchIndex  = 0
 $global:CursorIndex     = 0
 $global:LastPlayedIndex = 0
 $global:QueueOpen       = $false
+$global:PreSearchFile = $null
 
 Shuffle-Queue
 
 if ($global:CliSongTarget) {
-    $global:PreSearchQueue  = $global:Queue
-    $global:PreSearchIndex  = 0
-    $global:SearchMode      = $true
-    $global:Queue           = @($global:CliSongTarget)
-    $global:Index           = 0
-    $global:LoopMode        = $false
-    $global:RepeatOne       = $false
+    $global:PreSearchQueue = $global:Queue
+    $foundAt = [array]::IndexOf($global:Queue, $global:CliSongTarget)   
+    $global:SearchMode     = $true
+    $global:Queue          = @($global:CliSongTarget)
+    $global:Index          = 0
+    $global:LoopMode       = $false
+    $global:RepeatOne      = $false
     Write-Host "  [Search mode: playing single song]" -ForegroundColor DarkYellow
 }
 
@@ -556,6 +561,9 @@ while ($global:Running) {
                         "B"        { Prev-Track }
                         "P"        { Toggle-Pause }
                         "S"        {
+
+
+
                             if ($global:SearchMode) { Exit-SearchMode }
                             Write-Host "`n  Shuffling..." -ForegroundColor Yellow
                             Stop-Current
@@ -585,6 +593,9 @@ while ($global:Running) {
                 "B"        { Write-Host ""; Prev-Track }
                 "P"        { Toggle-Pause }
                 "S"        {
+
+
+
                     if ($global:SearchMode) { Exit-SearchMode }
                     Write-Host "`n  Shuffling..." -ForegroundColor Yellow
                     Stop-Current
