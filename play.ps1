@@ -253,7 +253,7 @@ function Open-Navigator {
                 Write-Host ""
                 Write-Host "Controls:"
                 Write-Host "  N = Next       | B = Previous  | P = Pause/Play"
-                Write-Host "  S = Shuffle 	 | Q = View Queue | QQ = Navigate | F = Search"
+                Write-Host "  S = Shuffle    | Q = View Queue | QQ = Navigate | F = Search"
                 Write-Host "  L = Toggle Loop (queue) | R = Toggle Repeat (current song)"
                 Write-Host "  + = Volume Up  | - = Volume Down"
                 Write-Host "  X = Exit"
