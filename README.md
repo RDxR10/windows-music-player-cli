@@ -131,3 +131,5 @@ Tracks can be added to the queue in two ways. Start by searching for the desired
 * 05-06-2026 [FIX]: The last played track now gets highlighted correctly for all shuffle cases.
 
 * 04-11-2026 [FIX]: Single-song folder broke the queue (one-item result was unwrapped into a string). Queue is now forced to be an array with @().
+
+* 05-11-2026 [FIX]: Audio files are now discovered correctly in directories containing wildcard characters. Directories with audio file extensions are now excluded.
