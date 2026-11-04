@@ -93,7 +93,7 @@ function Shuffle-Queue {
 
     $global:PreSearchFile = $null                        
 
-    $global:Queue       = $global:Songs | Sort-Object { Get-Random }
+    $global:Queue       = @($global:Songs | Sort-Object { Get-Random })
     $global:Index       = 0
     $global:CursorIndex = 0
 
@@ -441,7 +441,7 @@ function Search-And-Play {
 
 function Exit-SearchMode {
     $global:PreSearchFile   = $global:Queue[$global:Index]
-    $global:Queue           = $global:PreSearchQueue
+    $global:Queue           = @($global:PreSearchQueue)
     $global:Index           = $global:PreSearchIndex
     $global:LoopMode        = $false
     $global:RepeatOne       = $false
@@ -517,7 +517,7 @@ $global:PreSearchFile = $null
 Shuffle-Queue
 
 if ($global:CliSongTarget) {
-    $global:PreSearchQueue = $global:Queue
+    $global:PreSearchQueue = @($global:Queue)
     $foundAt = [array]::IndexOf($global:Queue, $global:CliSongTarget)   
     $global:SearchMode     = $true
     $global:Queue          = @($global:CliSongTarget)
