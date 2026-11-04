@@ -129,3 +129,5 @@ Tracks can be added to the queue in two ways. Start by searching for the desired
 * 31-05-2026 [FEAT]: The single song play/lazy play feature has been added. Song names can now be passed as arguments to directly play a specific song. Partial name matching is supported, so an exact name is not required. Also, the script now defaults to the directory it is placed in.
 
 * 05-06-2026 [FIX]: The last played track now gets highlighted correctly for all shuffle cases.
+
+* 04-11-2026 [FIX]: Single-song folder broke the queue (one-item result was unwrapped into a string). Queue is now forced to be an array with @().
