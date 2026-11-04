@@ -2,7 +2,7 @@ $MusicDir = $PSScriptRoot
 
 $SongArg = if ($args.Count -gt 0) { $args[0] } else { "" }
 
-if (-not (Test-Path $MusicDir)) {
+if (-not (Test-Path -LiteralPath $MusicDir)) {
     Write-Error "Directory not found: $MusicDir"
     exit
 }
@@ -34,7 +34,7 @@ function Show-Notification($title, $text) {
 }
 
 # Load songs
-$global:Songs = Get-ChildItem $MusicDir -Recurse -Include *.mp3, *.wav | Select-Object -ExpandProperty FullName
+$global:Songs = Get-ChildItem -Path ([WildcardPattern]::Escape($MusicDir)) -Recurse -File -Include *.mp3, *.wav | Select-Object -ExpandProperty FullName
 
 if (-not $global:Songs) {
     Write-Error "No audio files found"
