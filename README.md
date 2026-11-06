@@ -133,3 +133,7 @@ Tracks can be added to the queue in two ways. Start by searching for the desired
 * 04-11-2026 [FIX]: Single-song folder broke the queue (one-item result was unwrapped into a string). Queue is now forced to be an array with @().
 
 * 05-11-2026 [FIX]: Audio files are now discovered correctly in directories containing wildcard characters. Directories with audio file extensions are now excluded.
+
+* 06-11-2026 [FIX]: Playback now handles extraneous bytes before the actual audio data in both MP3 and WAV files without modifying the original files.
+
+* 06-11-2026 [FIX]: The player now converts IEEE float WAV files to PCM format before playback, without modifying the original files.
