@@ -12,9 +12,146 @@ Add-Type -TypeDefinition @"
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.IO;
 public class WinMM {
     [DllImport("winmm.dll")]
     public static extern int mciSendString(string command, StringBuilder buffer, int bufferSize, IntPtr hwndCallback);
+}
+
+// Converts standard or extensible IEEE-float WAV audio to temporary PCM16 WAV.
+// Returns false for non-float WAV files or unsupported/invalid float layouts.
+public static class WavFloatConverter {
+    private static readonly byte[] IeeeFloatSubFormat = new byte[] {
+        0x03, 0x00, 0x00, 0x00, 0x00, 0x00, 0x10, 0x00,
+        0x80, 0x00, 0x00, 0xAA, 0x00, 0x38, 0x9B, 0x71
+    };
+
+    public static bool TryConvert(string inputPath, long startOffset, string outputPath) {
+        bool outputCreated = false;
+        try {
+            using (FileStream input = new FileStream(inputPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
+            using (BinaryReader reader = new BinaryReader(input)) {
+                if (startOffset < 0 || startOffset + 12 > input.Length) return false;
+                input.Position = startOffset;
+                byte[] riff = reader.ReadBytes(12);
+                if (riff.Length != 12 || Encoding.ASCII.GetString(riff, 0, 4) != "RIFF" ||
+                    Encoding.ASCII.GetString(riff, 8, 4) != "WAVE") return false;
+
+                long containerEnd = startOffset + 8L + BitConverter.ToUInt32(riff, 4);
+                if (containerEnd > input.Length || containerEnd < startOffset + 12) return false;
+
+                byte[] format = null;
+                long dataOffset = -1;
+                long dataSize = -1;
+                long position = startOffset + 12;
+                while (position + 8 <= containerEnd) {
+                    input.Position = position;
+                    byte[] chunkHeader = reader.ReadBytes(8);
+                    if (chunkHeader.Length != 8) return false;
+                    string chunkId = Encoding.ASCII.GetString(chunkHeader, 0, 4);
+                    long chunkSize = BitConverter.ToUInt32(chunkHeader, 4);
+                    long chunkData = position + 8;
+                    long chunkEnd = chunkData + chunkSize;
+                    long nextChunk = chunkEnd + (chunkSize & 1L);
+                    if (chunkEnd > containerEnd || nextChunk > containerEnd) return false;
+
+                    if (chunkId == "fmt " && format == null) {
+                        if (chunkSize < 16) return false;
+                        input.Position = chunkData;
+                        format = reader.ReadBytes((int)Math.Min(chunkSize, 40L));
+                        if (format.Length < 16) return false;
+                    } else if (chunkId == "data" && dataOffset < 0) {
+                        dataOffset = chunkData;
+                        dataSize = chunkSize;
+                    }
+                    position = nextChunk;
+                }
+
+                if (position != containerEnd || format == null || dataOffset < 0 || dataSize <= 0) return false;
+
+                ushort formatTag = BitConverter.ToUInt16(format, 0);
+                int channels = BitConverter.ToUInt16(format, 2);
+                uint sampleRate = BitConverter.ToUInt32(format, 4);
+                uint byteRate = BitConverter.ToUInt32(format, 8);
+                ushort blockAlign = BitConverter.ToUInt16(format, 12);
+                ushort bitsPerSample = BitConverter.ToUInt16(format, 14);
+                bool isFloat = formatTag == 3;
+
+                if (formatTag == 0xFFFE) {
+                    if (format.Length < 40 || BitConverter.ToUInt16(format, 16) < 22) return false;
+                    if (BitConverter.ToUInt16(format, 18) != bitsPerSample) return false;
+                    isFloat = true;
+                    for (int i = 0; i < 16; i++) {
+                        if (format[24 + i] != IeeeFloatSubFormat[i]) { isFloat = false; break; }
+                    }
+                }
+                if (!isFloat) return false;
+                if (channels < 1 || channels > 32 || sampleRate < 1 || sampleRate > 768000) return false;
+                if (bitsPerSample != 32 && bitsPerSample != 64) return false;
+
+                int bytesPerSample = bitsPerSample / 8;
+                int expectedBlockAlign = channels * bytesPerSample;
+                if (blockAlign != expectedBlockAlign || dataSize % blockAlign != 0 ||
+                    byteRate != (long)sampleRate * blockAlign) return false;
+                long outputDataSize = (dataSize / bytesPerSample) * 2L;
+                long outputByteRate = (long)sampleRate * channels * 2L;
+                int outputBlockAlign = channels * 2;
+                if (outputDataSize > UInt32.MaxValue - 36L || outputByteRate > UInt32.MaxValue || outputBlockAlign > UInt16.MaxValue) return false;
+
+                using (FileStream output = new FileStream(outputPath, FileMode.CreateNew, FileAccess.Write, FileShare.None))
+                using (BinaryWriter writer = new BinaryWriter(output)) {
+                    outputCreated = true;
+                    writer.Write(Encoding.ASCII.GetBytes("RIFF"));
+                    writer.Write((uint)(36L + outputDataSize));
+                    writer.Write(Encoding.ASCII.GetBytes("WAVE"));
+                    writer.Write(Encoding.ASCII.GetBytes("fmt "));
+                    writer.Write((uint)16);
+                    writer.Write((ushort)1); // WAVE_FORMAT_PCM
+                    writer.Write((ushort)channels);
+                    writer.Write(sampleRate);
+                    writer.Write((uint)outputByteRate);
+                    writer.Write((ushort)outputBlockAlign);
+                    writer.Write((ushort)16);
+                    writer.Write(Encoding.ASCII.GetBytes("data"));
+                    writer.Write((uint)outputDataSize);
+
+                    input.Position = dataOffset;
+                    byte[] buffer = new byte[65536 - (65536 % bytesPerSample)];
+                    long remaining = dataSize;
+                    while (remaining > 0) {
+                        int wanted = (int)Math.Min(buffer.Length, remaining);
+                        wanted -= wanted % bytesPerSample;
+                        if (wanted <= 0) throw new IOException("Invalid IEEE-float WAV data length.");
+                        int read = 0;
+                        while (read < wanted) {
+                            int count = input.Read(buffer, read, wanted - read);
+                            if (count <= 0) throw new IOException("Unexpected end of IEEE-float WAV data.");
+                            read += count;
+                        }
+                        for (int i = 0; i < read; i += bytesPerSample) {
+                            double sample = bitsPerSample == 32
+                                ? (double)BitConverter.ToSingle(buffer, i)
+                                : BitConverter.ToDouble(buffer, i);
+                            short pcmSample;
+                            if (Double.IsNaN(sample) || Double.IsInfinity(sample)) pcmSample = 0;
+                            else if (sample >= 1.0) pcmSample = Int16.MaxValue;
+                            else if (sample <= -1.0) pcmSample = Int16.MinValue;
+                            else pcmSample = (short)Math.Round(sample < 0 ? sample * 32768.0 : sample * 32767.0);
+                            writer.Write(pcmSample);
+                        }
+                        remaining -= read;
+                    }
+                    writer.Flush();
+                }
+            }
+            return true;
+        } catch {
+            if (outputCreated) {
+                try { if (File.Exists(outputPath)) File.Delete(outputPath); } catch { }
+            }
+            return false;
+        }
+    }
 }
 "@
 
@@ -82,6 +219,405 @@ if ($SongArg -ne "") {
 
         $global:CliSongTarget = $list[$choiceInt - 1]
     }
+}
+
+# ---------------------------------------------------------------------------
+# Audio leading-bytes handling (MP3 and WAV)
+#
+# MP3: locate three consecutive MPEG frames after ID3v2 tags or junk bytes.
+# WAV: locate a structurally valid RIFF/WAVE container, validate its chunk
+# boundaries and fmt/data chunks, and skip bytes before that container.
+# IEEE-float WAV files are converted to temporary 16-bit PCM WAV files for MCI.
+#
+# The source file is never modified. Temporary files are used only for prefix
+# removal or IEEE-float conversion. If detection/conversion is uncertain, the
+# original file is used unchanged. RF64 and big-endian RIFX are not handled.
+# ---------------------------------------------------------------------------
+
+$global:TempAudioDir  = Join-Path ([System.IO.Path]::GetTempPath()) ("play-ps1-" + $PID)
+$global:TempAudioFile = $null
+
+$global:MpegBitrates = @{
+    'V1L1'  = @(0,32,64,96,128,160,192,224,256,288,320,352,384,416,448)
+    'V1L2'  = @(0,32,48,56,64,80,96,112,128,160,192,224,256,320,384)
+    'V1L3'  = @(0,32,40,48,56,64,80,96,112,128,160,192,224,256,320)
+    'V2L1'  = @(0,32,48,56,64,80,96,112,128,144,160,176,192,224,256)
+    'V2L23' = @(0,8,16,24,32,40,48,56,64,80,96,112,128,144,160)
+}
+$global:MpegSampleRates = @{
+    3 = @(44100, 48000, 32000)    # MPEG 1
+    2 = @(22050, 24000, 16000)    # MPEG 2
+    0 = @(11025, 12000, 8000)     # MPEG 2.5
+}
+
+# Returns MPEG frame information, or $null when the four bytes are not a
+# supported MPEG audio header. Free-format frames are intentionally rejected
+# because their frame length cannot be calculated from the header alone.
+function Get-MpegFrameInfo {
+    param([byte[]]$Buf, [int]$Pos)
+
+    if ($Pos -lt 0 -or $Pos + 4 -gt $Buf.Length) { return $null }
+    if ($Buf[$Pos] -ne 0xFF -or ($Buf[$Pos + 1] -band 0xE0) -ne 0xE0) { return $null }
+
+    $verBits   = ($Buf[$Pos + 1] -shr 3) -band 3
+    $layerBits = ($Buf[$Pos + 1] -shr 1) -band 3
+    $brIdx     = ($Buf[$Pos + 2] -shr 4) -band 15
+    $srIdx     = ($Buf[$Pos + 2] -shr 2) -band 3
+    $pad       = ($Buf[$Pos + 2] -shr 1) -band 1
+
+    # Reserved MPEG version, reserved layer, free/bad bitrate or reserved rate.
+    if ($verBits -eq 1 -or $layerBits -eq 0 -or $brIdx -eq 0 -or $brIdx -eq 15 -or $srIdx -eq 3) {
+        return $null
+    }
+
+    $isMpeg1 = ($verBits -eq 3)
+    if ($layerBits -eq 3)     { $key = if ($isMpeg1) { 'V1L1' } else { 'V2L1' } }
+    elseif ($layerBits -eq 2) { $key = if ($isMpeg1) { 'V1L2' } else { 'V2L23' } }
+    else                      { $key = if ($isMpeg1) { 'V1L3' } else { 'V2L23' } }
+
+    $bitrate = $global:MpegBitrates[$key][$brIdx] * 1000
+    $sampleRate = $global:MpegSampleRates[$verBits][$srIdx]
+
+    if ($layerBits -eq 3) {
+        $frameLength = [int](([math]::Floor(12 * $bitrate / $sampleRate) + $pad) * 4)
+    } else {
+        $coefficient = if ($layerBits -eq 1 -and -not $isMpeg1) { 72 } else { 144 }
+        $frameLength = [int]([math]::Floor($coefficient * $bitrate / $sampleRate) + $pad)
+    }
+
+    if ($frameLength -lt 4) { return $null }
+
+    return [pscustomobject]@{
+        Length     = $frameLength
+        Version    = $verBits
+        Layer      = $layerBits
+        SampleRate = $sampleRate
+    }
+}
+
+# Skip valid consecutive ID3v2 tags at the beginning of the file. The ID3v2.4
+# tag size excludes its 10-byte header and, when present, its 10-byte footer.
+function Get-Id3v2EndOffset {
+    param([System.IO.FileStream]$Stream)
+
+    $length = $Stream.Length
+    $offset = 0L
+    $header = New-Object byte[] 10
+
+    while ($offset + 10 -le $length) {
+        $Stream.Position = $offset
+        if ($Stream.Read($header, 0, 10) -ne 10) { break }
+        if ($header[0] -ne 0x49 -or $header[1] -ne 0x44 -or $header[2] -ne 0x33) { break }
+
+        $major = [int]$header[3]
+        $revision = [int]$header[4]
+        $flags = [int]$header[5]
+
+        if ($major -lt 2 -or $major -gt 4 -or $revision -eq 0xFF) { break }
+        if (($major -lt 4 -and ($flags -band 0x1F) -ne 0) -or
+            ($major -eq 4 -and ($flags -band 0x0F) -ne 0)) { break }
+
+        # The four size bytes must be syncsafe (their high bits must be zero).
+        if ((($header[6] -bor $header[7] -bor $header[8] -bor $header[9]) -band 0x80) -ne 0) { break }
+
+        $tagSize = ([long]$header[6] -shl 21) -bor ([long]$header[7] -shl 14) -bor ([long]$header[8] -shl 7) -bor [long]$header[9]
+        $hasFooter = ($major -eq 4 -and ($flags -band 0x10) -ne 0)
+        $footerSize = if ($hasFooter) { 10L } else { 0L }
+        $tagEnd = $offset + 10L + $tagSize + $footerSize
+
+        if ($tagEnd -gt $length -or $tagEnd -le $offset) { break }
+
+        if ($hasFooter) {
+            $footer = New-Object byte[] 10
+            $Stream.Position = $offset + 10L + $tagSize
+            if ($Stream.Read($footer, 0, 10) -ne 10) { break }
+            if ($footer[0] -ne 0x33 -or $footer[1] -ne 0x44 -or $footer[2] -ne 0x49) { break }
+            $footerMatches = $true
+            for ($j = 3; $j -lt 10; $j++) {
+                if ($footer[$j] -ne $header[$j]) { $footerMatches = $false; break }
+            }
+            if (-not $footerMatches) { break }
+        }
+
+        $offset = $tagEnd
+    }
+
+    return $offset
+}
+
+# Returns the absolute offset of the first verified audio frame, or -1 when
+# no sufficiently reliable frame sequence is found. Scans in small overlapping
+# chunks, so even large prefixes are supported without reading the whole file.
+function Get-AudioStartOffset {
+    param([string]$File)
+
+    $stream = [System.IO.File]::Open($File, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+    try {
+        $fileLength = $stream.Length
+        $startOffset = Get-Id3v2EndOffset -Stream $stream
+        if ($startOffset -ge $fileLength) { return -1L }
+
+        $chunkSize = 65536
+        # Larger than the maximum supported MPEG frame length, with room for
+        # the next two frame headers when a candidate is near a chunk boundary.
+        $overlap = 4096
+        $scanPosition = $startOffset
+
+        while ($scanPosition -lt $fileLength) {
+            $stream.Position = $scanPosition
+            $toRead = [int][math]::Min($chunkSize, $fileLength - $scanPosition)
+            $buffer = New-Object byte[] $toRead
+            $bytesRead = 0
+            while ($bytesRead -lt $toRead) {
+                $count = $stream.Read($buffer, $bytesRead, $toRead - $bytesRead)
+                if ($count -le 0) { break }
+                $bytesRead += $count
+            }
+
+            if ($bytesRead -lt 4) { break }
+
+            $isLastChunk = ($scanPosition + $bytesRead -ge $fileLength)
+            $lastCandidate = if ($isLastChunk) { $bytesRead - 4 } else { $bytesRead - $overlap - 1 }
+
+            for ($i = 0; $i -le $lastCandidate; $i++) {
+                if ($buffer[$i] -ne 0xFF) { continue }
+
+                $first = Get-MpegFrameInfo -Buf $buffer -Pos $i
+                if ($null -eq $first) { continue }
+
+                $secondPos = $i + $first.Length
+                $second = Get-MpegFrameInfo -Buf $buffer -Pos $secondPos
+                if ($null -eq $second) { continue }
+                if ($second.Version -ne $first.Version -or $second.Layer -ne $first.Layer -or $second.SampleRate -ne $first.SampleRate) { continue }
+
+                $thirdPos = $secondPos + $second.Length
+                $third = Get-MpegFrameInfo -Buf $buffer -Pos $thirdPos
+                if ($null -eq $third) { continue }
+                if ($third.Version -ne $first.Version -or $third.Layer -ne $first.Layer -or $third.SampleRate -ne $first.SampleRate) { continue }
+
+                return ($scanPosition + $i)
+            }
+
+            if ($isLastChunk) { break }
+            $advance = $bytesRead - $overlap
+            if ($advance -le 0) { break }
+            $scanPosition += $advance
+        }
+
+        return -1L
+    }
+    finally {
+        $stream.Dispose()
+    }
+}
+
+# Validate a RIFF/WAVE container at a specific offset. The declared RIFF
+# boundary must fit inside the file, and both fmt and non-empty data chunks
+# must be present and remain inside that boundary. Unknown chunks are skipped
+# using their declared size plus RIFF's required odd-byte padding.
+function Test-WavContainerAtOffset {
+    param(
+        [System.IO.FileStream]$Stream,
+        [long]$Offset
+    )
+
+    $fileLength = $Stream.Length
+    if ($Offset -lt 0 -or $Offset + 12 -gt $fileLength) { return $false }
+
+    $header = New-Object byte[] 12
+    $Stream.Position = $Offset
+    if ($Stream.Read($header, 0, 12) -ne 12) { return $false }
+    if ([System.Text.Encoding]::ASCII.GetString($header, 0, 4) -cne 'RIFF' -or
+        [System.Text.Encoding]::ASCII.GetString($header, 8, 4) -cne 'WAVE') { return $false }
+
+    $riffSize = [long][BitConverter]::ToUInt32($header, 4)
+    $containerEnd = $Offset + 8L + $riffSize
+    if ($riffSize -lt 36 -or $containerEnd -gt $fileLength -or $containerEnd -le ($Offset + 12)) {
+        return $false
+    }
+
+    $position = $Offset + 12L
+    $hasFormat = $false
+    $hasData = $false
+    $chunkHeader = New-Object byte[] 8
+
+    while ($position + 8L -le $containerEnd) {
+        $Stream.Position = $position
+        if ($Stream.Read($chunkHeader, 0, 8) -ne 8) { return $false }
+
+        $chunkId = [System.Text.Encoding]::ASCII.GetString($chunkHeader, 0, 4)
+        $chunkSize = [long][BitConverter]::ToUInt32($chunkHeader, 4)
+        $chunkDataStart = $position + 8L
+        $chunkEnd = $chunkDataStart + $chunkSize
+        $nextChunk = $chunkEnd + ($chunkSize -band 1)
+        if ($chunkEnd -gt $containerEnd -or $nextChunk -gt $containerEnd) { return $false }
+
+        if ($chunkId -ceq 'fmt ') {
+            if ($chunkSize -lt 16) { return $false }
+            $fmt = New-Object byte[] 16
+            $Stream.Position = $chunkDataStart
+            if ($Stream.Read($fmt, 0, 16) -ne 16) { return $false }
+
+            $formatTag = [int][BitConverter]::ToUInt16($fmt, 0)
+            $channels = [int][BitConverter]::ToUInt16($fmt, 2)
+            $sampleRate = [long][BitConverter]::ToUInt32($fmt, 4)
+            $byteRate = [long][BitConverter]::ToUInt32($fmt, 8)
+            $blockAlign = [int][BitConverter]::ToUInt16($fmt, 12)
+            $bitsPerSample = [int][BitConverter]::ToUInt16($fmt, 14)
+
+            if ($formatTag -eq 0 -or $channels -lt 1 -or $channels -gt 32 -or
+                $sampleRate -lt 1 -or $sampleRate -gt 768000 -or
+                $byteRate -lt 1 -or $blockAlign -lt 1 -or
+                $bitsPerSample -lt 1 -or $bitsPerSample -gt 64) { return $false }
+
+            # WAVE_FORMAT_EXTENSIBLE requires its 22-byte extension.
+            if ($formatTag -eq 0xFFFE) {
+                if ($chunkSize -lt 40) { return $false }
+                $extensionSizeBytes = New-Object byte[] 2
+                $Stream.Position = $chunkDataStart + 16
+                if ($Stream.Read($extensionSizeBytes, 0, 2) -ne 2) { return $false }
+                if ([BitConverter]::ToUInt16($extensionSizeBytes, 0) -lt 22) { return $false }
+            }
+
+            # PCM and IEEE float have predictable block alignment and byte rate.
+            if ($formatTag -eq 1 -or $formatTag -eq 3) {
+                $expectedAlign = [int]($channels * [math]::Ceiling($bitsPerSample / 8.0))
+                if ($blockAlign -ne $expectedAlign -or $byteRate -ne ($sampleRate * $blockAlign)) {
+                    return $false
+                }
+            }
+            $hasFormat = $true
+        }
+        elseif ($chunkId -ceq 'data') {
+            if ($chunkSize -le 0) { return $false }
+            $hasData = $true
+        }
+
+        if ($nextChunk -le $position) { return $false }
+        $position = $nextChunk
+    }
+
+    return ($position -eq $containerEnd -and $hasFormat -and $hasData)
+}
+
+# Find a valid RIFF/WAVE container anywhere in the file. The 64 KB chunk scan
+# has a three-byte overlap so a RIFF signature crossing a chunk boundary is
+# still checked. No fixed prefix-size limit is imposed.
+function Get-WavStartOffset {
+    param([string]$File)
+
+    $stream = [System.IO.File]::Open($File, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+    try {
+        $chunkSize = 65536
+        $overlap = 3
+        $scanPosition = 0L
+
+        while ($scanPosition -lt $stream.Length) {
+            $stream.Position = $scanPosition
+            $toRead = [int][math]::Min($chunkSize, $stream.Length - $scanPosition)
+            $buffer = New-Object byte[] $toRead
+            $bytesRead = 0
+            while ($bytesRead -lt $toRead) {
+                $count = $stream.Read($buffer, $bytesRead, $toRead - $bytesRead)
+                if ($count -le 0) { break }
+                $bytesRead += $count
+            }
+            if ($bytesRead -lt 4) { break }
+
+            $lastCandidate = $bytesRead - 4
+            for ($i = 0; $i -le $lastCandidate; $i++) {
+                if ($buffer[$i] -ne 0x52 -or $buffer[$i + 1] -ne 0x49 -or
+                    $buffer[$i + 2] -ne 0x46 -or $buffer[$i + 3] -ne 0x46) { continue }
+
+                $candidate = $scanPosition + $i
+                if (Test-WavContainerAtOffset -Stream $stream -Offset $candidate) {
+                    return $candidate
+                }
+            }
+
+            if ($scanPosition + $bytesRead -ge $stream.Length) { break }
+            $advance = $bytesRead - $overlap
+            if ($advance -le 0) { break }
+            $scanPosition += $advance
+        }
+
+        return -1L
+    }
+    finally {
+        $stream.Dispose()
+    }
+}
+
+# Returns the original path, or a temporary copy without the leading bytes.
+# MP3 and WAV use separate format-specific detectors; uncertain files are
+# passed to MCI unchanged.
+function Get-PlayablePath {
+    param([string]$File)
+
+    $extension = [System.IO.Path]::GetExtension($File)
+    if ($extension -ine '.mp3' -and $extension -ine '.wav') { return $File }
+
+    $tmp = $null
+    try {
+        if ($extension -ieq '.mp3') {
+            $start = Get-AudioStartOffset -File $File
+        } else {
+            $start = Get-WavStartOffset -File $File
+        }
+        if ($start -lt 0) { return $File }
+
+        [void][System.IO.Directory]::CreateDirectory($global:TempAudioDir)
+
+        # Convert standard and extensible IEEE-float WAV files to PCM16 for MCI.
+        # The converter reads from the detected RIFF offset, so prefixed files
+        # do not need an intermediate stripped copy.
+        if ($extension -ieq '.wav') {
+            $converted = Join-Path $global:TempAudioDir ([guid]::NewGuid().ToString('N') + '.wav')
+            if ([WavFloatConverter]::TryConvert($File, $start, $converted)) {
+                $global:TempAudioFile = $converted
+                return $converted
+            }
+            if (Test-Path -LiteralPath $converted) {
+                Remove-Item -LiteralPath $converted -Force -ErrorAction SilentlyContinue
+            }
+        }
+
+        # If no conversion is needed, retain the existing leading-byte handling.
+        if ($start -eq 0) { return $File }
+
+        $tempExtension = if ($extension -ieq '.mp3') { '.mp3' } else { '.wav' }
+        $tmp = Join-Path $global:TempAudioDir ([guid]::NewGuid().ToString('N') + $tempExtension)
+
+        $inputStream = [System.IO.File]::Open($File, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+        try {
+            $inputStream.Position = $start
+            $outputStream = [System.IO.File]::Create($tmp)
+            try {
+                $inputStream.CopyTo($outputStream)
+            }
+            finally {
+                $outputStream.Dispose()
+            }
+        }
+        finally {
+            $inputStream.Dispose()
+        }
+
+        $global:TempAudioFile = $tmp
+        return $tmp
+    }
+    catch {
+        if ($tmp -and (Test-Path -LiteralPath $tmp)) {
+            Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue
+        }
+        return $File
+    }
+}
+function Remove-TempAudio {
+    if ($global:TempAudioFile -and (Test-Path -LiteralPath $global:TempAudioFile)) {
+        Remove-Item -LiteralPath $global:TempAudioFile -Force -ErrorAction SilentlyContinue
+    }
+    $global:TempAudioFile = $null
 }
 
 function Shuffle-Queue {
@@ -304,11 +840,28 @@ function Set-Volume($vol) {
 }
 
 function Play-Current {
+    # Close the previous track (if any) and delete its temp copy before opening the next one
+    Stop-Current
+
     $file = $global:Queue[$global:Index]
     $global:Alias = "audio$([guid]::NewGuid().ToString('N'))"
     Write-Host "`nNow playing: $(Split-Path $file -Leaf)" -ForegroundColor Cyan
     Show-Notification "Now Playing" (Split-Path $file -Leaf)
-    [WinMM]::mciSendString("open `"$file`" type mpegvideo alias $global:Alias", $null, 0, [IntPtr]::Zero) | Out-Null
+
+    # Remove a verified leading MP3/WAV prefix when present.
+    $playPath = Get-PlayablePath $file
+    $mciType = if ([System.IO.Path]::GetExtension($file) -ieq '.wav') { 'waveaudio' } else { 'mpegvideo' }
+
+    $rc = [WinMM]::mciSendString("open `"$playPath`" type $mciType alias $global:Alias", $null, 0, [IntPtr]::Zero)
+    if ($rc -ne 0 -and $playPath -ne $file) {
+        # The stripped copy would not open: fall back to the original file
+        Remove-TempAudio
+        $rc = [WinMM]::mciSendString("open `"$file`" type $mciType alias $global:Alias", $null, 0, [IntPtr]::Zero)
+    }
+    if ($rc -ne 0) {
+        Write-Host "  Could not open this file (MCI error $rc)." -ForegroundColor Red
+    }
+
     [WinMM]::mciSendString("play $global:Alias", $null, 0, [IntPtr]::Zero) | Out-Null
     $scaled = [math]::Floor($global:Volume * 10)
     [WinMM]::mciSendString("setaudio $global:Alias volume to $scaled", $null, 0, [IntPtr]::Zero) | Out-Null
@@ -320,6 +873,7 @@ function Stop-Current {
         [WinMM]::mciSendString("stop $global:Alias", $null, 0, [IntPtr]::Zero) | Out-Null
         [WinMM]::mciSendString("close $global:Alias", $null, 0, [IntPtr]::Zero) | Out-Null
     }
+    Remove-TempAudio
 }
 
 function Toggle-Pause {
@@ -539,7 +1093,8 @@ Write-Host "  X = Exit"
 Write-Host "  (Loop and Repeat are OFF by default.)"
 Write-Host ""
 
-# Main loop
+# Main loop (try/finally so the temp audio copy is removed even on Ctrl+C)
+try {
 while ($global:Running) {
 
     if (-not $global:WaitingForLoop) { Show-Progress }
@@ -653,4 +1208,11 @@ while ($global:Running) {
     }
 
     Start-Sleep -Milliseconds 200
+}
+}
+finally {
+    Stop-Current
+    if (Test-Path -LiteralPath $global:TempAudioDir) {
+        Remove-Item -LiteralPath $global:TempAudioDir -Recurse -Force -ErrorAction SilentlyContinue
+    }
 }
