@@ -18,6 +18,183 @@ public class WinMM {
     public static extern int mciSendString(string command, StringBuilder buffer, int bufferSize, IntPtr hwndCallback);
 }
 
+
+// Controls the current process's Windows Core Audio session volume.
+// The session is located by process ID so MCI playback remains unchanged.
+public static class CoreAudioSessionVolume {
+    private static readonly Guid MMDeviceEnumeratorClsid = new Guid("BCDE0395-E52F-467C-8E3D-C4579291692E");
+    private static readonly Guid AudioSessionManager2Iid = new Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F");
+
+    [ComImport, Guid("A95664D2-9614-4F35-A746-DE8DB63617E6"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IMMDeviceEnumerator {
+        [PreserveSig] int EnumAudioEndpoints(int dataFlow, uint stateMask, out IntPtr devices);
+        [PreserveSig] int GetDefaultAudioEndpoint(int dataFlow, int role, out IMMDevice device);
+        [PreserveSig] int GetDevice([MarshalAs(UnmanagedType.LPWStr)] string id, out IMMDevice device);
+        [PreserveSig] int RegisterEndpointNotificationCallback(IntPtr client);
+        [PreserveSig] int UnregisterEndpointNotificationCallback(IntPtr client);
+    }
+
+    [ComImport, Guid("D666063F-1587-4E43-81F1-B948E807363F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IMMDevice {
+        [PreserveSig] int Activate(ref Guid iid, uint clsctx, IntPtr activationParams, [MarshalAs(UnmanagedType.IUnknown)] out object instance);
+        [PreserveSig] int OpenPropertyStore(uint access, out IntPtr properties);
+        [PreserveSig] int GetId(out IntPtr id);
+        [PreserveSig] int GetState(out uint state);
+    }
+
+    [ComImport, Guid("BFA971F1-4D5E-40BB-935E-967039BFBEE4"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IAudioSessionManager {
+        [PreserveSig] int GetAudioSessionControl(ref Guid sessionGuid, uint flags, out IAudioSessionControl sessionControl);
+        [PreserveSig] int GetSimpleAudioVolume(ref Guid sessionGuid, uint flags, out ISimpleAudioVolume audioVolume);
+    }
+
+    [ComImport, Guid("77AA99A0-1BD6-484F-8BC7-2C654C9A9B6F"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IAudioSessionManager2 : IAudioSessionManager {
+        [PreserveSig] new int GetAudioSessionControl(ref Guid sessionGuid, uint flags, out IAudioSessionControl sessionControl);
+        [PreserveSig] new int GetSimpleAudioVolume(ref Guid sessionGuid, uint flags, out ISimpleAudioVolume audioVolume);
+        [PreserveSig] int GetSessionEnumerator(out IAudioSessionEnumerator sessionEnumerator);
+        [PreserveSig] int RegisterSessionNotification(IntPtr notification);
+        [PreserveSig] int UnregisterSessionNotification(IntPtr notification);
+        [PreserveSig] int RegisterDuckNotification([MarshalAs(UnmanagedType.LPWStr)] string sessionId, IntPtr notification);
+        [PreserveSig] int UnregisterDuckNotification(IntPtr notification);
+    }
+
+    [ComImport, Guid("E2F5BB11-0570-40CA-ACDD-3AA01277DEE8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IAudioSessionEnumerator {
+        [PreserveSig] int GetCount(out int count);
+        [PreserveSig] int GetSession(int index, out IAudioSessionControl session);
+    }
+
+    [ComImport, Guid("F4B1A599-7266-4319-A8CA-E70ACB11E8CD"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IAudioSessionControl {
+        [PreserveSig] int GetState(out int state);
+        [PreserveSig] int GetDisplayName(out IntPtr name);
+        [PreserveSig] int SetDisplayName([MarshalAs(UnmanagedType.LPWStr)] string name, ref Guid context);
+        [PreserveSig] int GetIconPath(out IntPtr path);
+        [PreserveSig] int SetIconPath([MarshalAs(UnmanagedType.LPWStr)] string path, ref Guid context);
+        [PreserveSig] int GetGroupingParam(out Guid grouping);
+        [PreserveSig] int SetGroupingParam(ref Guid grouping, ref Guid context);
+        [PreserveSig] int RegisterAudioSessionNotification(IntPtr notification);
+        [PreserveSig] int UnregisterAudioSessionNotification(IntPtr notification);
+    }
+
+    [ComImport, Guid("BFB7FF88-7239-4FC9-8FA2-07C950BE9C6D"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface IAudioSessionControl2 : IAudioSessionControl {
+        [PreserveSig] new int GetState(out int state);
+        [PreserveSig] new int GetDisplayName(out IntPtr name);
+        [PreserveSig] new int SetDisplayName([MarshalAs(UnmanagedType.LPWStr)] string name, ref Guid context);
+        [PreserveSig] new int GetIconPath(out IntPtr path);
+        [PreserveSig] new int SetIconPath([MarshalAs(UnmanagedType.LPWStr)] string path, ref Guid context);
+        [PreserveSig] new int GetGroupingParam(out Guid grouping);
+        [PreserveSig] new int SetGroupingParam(ref Guid grouping, ref Guid context);
+        [PreserveSig] new int RegisterAudioSessionNotification(IntPtr notification);
+        [PreserveSig] new int UnregisterAudioSessionNotification(IntPtr notification);
+        [PreserveSig] int GetSessionIdentifier(out IntPtr identifier);
+        [PreserveSig] int GetSessionInstanceIdentifier(out IntPtr identifier);
+        [PreserveSig] int GetProcessId(out uint processId);
+        [PreserveSig] int IsSystemSoundsSession();
+    }
+
+    [ComImport, Guid("87CE5498-68D6-44E5-9215-6DA47EF883D8"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+    private interface ISimpleAudioVolume {
+        [PreserveSig] int SetMasterVolume(float level, IntPtr eventContext);
+        [PreserveSig] int GetMasterVolume(out float level);
+        [PreserveSig] int SetMute([MarshalAs(UnmanagedType.Bool)] bool mute, IntPtr eventContext);
+        [PreserveSig] int GetMute([MarshalAs(UnmanagedType.Bool)] out bool mute);
+    }
+
+    public static bool SetVolumeForProcess(int processId, float level, int retries, out string error) {
+        error = null;
+        if (level < 0.0f || level > 1.0f) {
+            error = "Volume must be between 0.0 and 1.0.";
+            return false;
+        }
+
+        for (int attempt = 0; attempt < Math.Max(1, retries); attempt++) {
+            // MCI can create its audio session just after the play command.
+            if (TrySetOnRole(processId, level, 0, out error)) return true; // eConsole
+            string multimediaError;
+            if (TrySetOnRole(processId, level, 1, out multimediaError)) return true; // eMultimedia
+            if (!String.IsNullOrEmpty(multimediaError)) error = multimediaError;
+            if (attempt + 1 < Math.Max(1, retries)) System.Threading.Thread.Sleep(100);
+        }
+
+        if (String.IsNullOrEmpty(error)) error = "No active Core Audio session was found for this player process.";
+        return false;
+    }
+
+    private static bool TrySetOnRole(int processId, float level, int role, out string error) {
+        error = null;
+        IMMDeviceEnumerator deviceEnumerator = null;
+        IMMDevice device = null;
+        IAudioSessionManager2 manager = null;
+        IAudioSessionEnumerator sessions = null;
+        bool updated = false;
+
+        try {
+            Type enumeratorType = Type.GetTypeFromCLSID(MMDeviceEnumeratorClsid);
+            deviceEnumerator = (IMMDeviceEnumerator)Activator.CreateInstance(enumeratorType);
+
+            int hr = deviceEnumerator.GetDefaultAudioEndpoint(0, role, out device); // eRender
+            if (hr < 0) Marshal.ThrowExceptionForHR(hr);
+
+            object managerObject;
+            Guid iid = AudioSessionManager2Iid;
+            hr = device.Activate(ref iid, 23, IntPtr.Zero, out managerObject); // CLSCTX_ALL
+            if (hr < 0) Marshal.ThrowExceptionForHR(hr);
+            manager = (IAudioSessionManager2)managerObject;
+
+            hr = manager.GetSessionEnumerator(out sessions);
+            if (hr < 0) Marshal.ThrowExceptionForHR(hr);
+
+            int count;
+            hr = sessions.GetCount(out count);
+            if (hr < 0) Marshal.ThrowExceptionForHR(hr);
+
+            for (int i = 0; i < count; i++) {
+                IAudioSessionControl session = null;
+                try {
+                    hr = sessions.GetSession(i, out session);
+                    if (hr < 0 || session == null) continue;
+
+                    IAudioSessionControl2 session2 = (IAudioSessionControl2)session;
+                    uint ownerProcessId;
+                    hr = session2.GetProcessId(out ownerProcessId);
+                    if (hr < 0 || ownerProcessId != (uint)processId) continue;
+
+                    ISimpleAudioVolume volume = (ISimpleAudioVolume)session2;
+                    hr = volume.SetMasterVolume(level, IntPtr.Zero);
+                    if (hr < 0) Marshal.ThrowExceptionForHR(hr);
+                    updated = true;
+                } catch (Exception ex) {
+                    error = ex.Message;
+                } finally {
+                    if (session != null && Marshal.IsComObject(session)) {
+                        try { Marshal.ReleaseComObject(session); } catch { }
+                    }
+                }
+            }
+        } catch (Exception ex) {
+            error = ex.Message;
+        } finally {
+            if (sessions != null && Marshal.IsComObject(sessions)) {
+                try { Marshal.ReleaseComObject(sessions); } catch { }
+            }
+            if (manager != null && Marshal.IsComObject(manager)) {
+                try { Marshal.ReleaseComObject(manager); } catch { }
+            }
+            if (device != null && Marshal.IsComObject(device)) {
+                try { Marshal.ReleaseComObject(device); } catch { }
+            }
+            if (deviceEnumerator != null && Marshal.IsComObject(deviceEnumerator)) {
+                try { Marshal.ReleaseComObject(deviceEnumerator); } catch { }
+            }
+        }
+
+        return updated;
+    }
+}
+
 // Converts standard or extensible IEEE-float WAV audio to temporary PCM16 WAV.
 // Returns false for non-float WAV files or unsupported/invalid float layouts.
 public static class WavFloatConverter {
@@ -832,10 +1009,21 @@ function Show-Progress {
     Write-Host "`r  $state  $bar  $posStr / $durStr   " -NoNewline
 }
 
-function Set-Volume($vol) {
+function Set-Volume($vol, $waitForSession = $false) {
     $global:Volume = [math]::Max(0, [math]::Min(100, $vol))
-    $scaled = [math]::Floor($global:Volume * 10)
-    [WinMM]::mciSendString("setaudio $global:Alias volume to $scaled", $null, 0, [IntPtr]::Zero) | Out-Null
+    $level = [single]($global:Volume / 100.0)
+    $retries = if ($waitForSession) { 15 } else { 1 }
+    $errorMessage = $null
+
+    $success = [CoreAudioSessionVolume]::SetVolumeForProcess(
+        $PID, $level, $retries, [ref]$errorMessage
+    )
+
+    if (-not $success) {
+        Write-Host "`r  Volume control unavailable: $errorMessage   " -ForegroundColor Red
+        return
+    }
+
     Write-Host "`r  Volume: $global:Volume%   " -NoNewline
 }
 
@@ -863,9 +1051,8 @@ function Play-Current {
     }
 
     [WinMM]::mciSendString("play $global:Alias", $null, 0, [IntPtr]::Zero) | Out-Null
-    $scaled = [math]::Floor($global:Volume * 10)
-    [WinMM]::mciSendString("setaudio $global:Alias volume to $scaled", $null, 0, [IntPtr]::Zero) | Out-Null
     $global:Paused = $false
+    Set-Volume $global:Volume $true
 }
 
 function Stop-Current {
