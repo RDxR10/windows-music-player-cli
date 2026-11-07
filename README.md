@@ -137,3 +137,5 @@ Tracks can be added to the queue in two ways. Start by searching for the desired
 * 06-11-2026 [FIX]: Playback now handles extraneous bytes before the actual audio data in both MP3 and WAV files without modifying the original files.
 
 * 06-11-2026 [FIX]: The player now converts IEEE float WAV files to PCM format before playback, without modifying the original files.
+
+* 07-11-2026 [FIX]: Volume control now uses Windows Core Audio, allowing volume adjustment to work correctly during WAV playback. 
