@@ -1023,8 +1023,10 @@ function Set-Volume($vol, $waitForSession = $false) {
         Write-Host "`r  Volume control unavailable: $errorMessage   " -ForegroundColor Red
         return
     }
-
-    Write-Host "`r  Volume: $global:Volume%   " -NoNewline
+	
+	if (-not $waitForSession) {
+		Write-Host "`r  Volume: $global:Volume%   " -NoNewline
+	}
 }
 
 function Play-Current {
